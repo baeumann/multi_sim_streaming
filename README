@@ -1,47 +1,243 @@
+<div align="center">
 
-Everything is vanilla HTML/CSS/JS drawn onto `<canvas>` elements. The "camera" is a procedurally
-generated animated scene (gradient sky, orbiting light orbs, city silhouette, HUD overlay, sensor
-grain) so the file is self-contained and needs no external media.
+# 📡 Multi-SIM Streaming Visualiser
 
-Key functions, if you want to poke at the internals:
+**An interactive exploration of multi-SIM bonded streaming — how splitting a live video feed across _n_ cellular uplinks degrades when individual SIMs die, and why the *way* you split it matters.**
+
+[![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/HTML)
+[![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+[![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/CSS)
+[![No Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen?style=for-the-badge)](#)
+[![Single File](https://img.shields.io/badge/build_step-none-blueviolet?style=for-the-badge)](#)
+
+[**Open the visualiser »**](./index.html) · [Report a bug](../../issues) · [Request a feature](../../issues)
+
+</div>
+
+---
+
+## 📖 Table of Contents
+
+- [Overview](#-overview)
+- [Why bond multiple SIMs?](#-why-bond-multiple-sims)
+- [The two transmission strategies](#-the-two-transmission-strategies)
+  - [Variant A — Quadrant split](#variant-a--quadrant-split)
+  - [Variant B — Pixel round-robin](#variant-b--pixel-round-robin)
+  - [Nearest-neighbour fill](#optional-nearest-neighbour-fill-variant-b)
+- [Total failure & fiber fallback](#-total-failure--fiber-fallback)
+- [Using the visualiser](#️-using-the-visualiser)
+- [Things worth trying](#-things-worth-trying)
+- [Project layout](#-project-layout)
+- [Internals](#️-internals)
+- [What this is *not*](#-what-this-is-not)
+- [Ideas for extending it](#-ideas-for-extending-it)
+- [License](#-license)
+
+---
+
+## 🎯 Overview
+
+This is a **browser-based sandbox** for exploring how a single video feed can be split across
+multiple cellular modems (SIM cards), each with its own independent uplink, and reassembled on a
+server before being pushed to Twitch (or any RTMP destination).
+
+It is **not** a production encoder. Nothing is compressed, packetised, or sent over a network.
+The "SIMs" are booleans; the "frames" are `ImageData` buffers. The point is to make an intuition
+about **failure behaviour** visible — something that is surprisingly hard to reason about on paper.
+
+> 💡 **Zero setup.** Open `index.html` in any modern browser. No build step, no dependencies, no
+> network access required.
+
+---
+
+## 📶 Why bond multiple SIMs?
+
+A single cellular uplink is fragile: it drops in tunnels, saturates in crowded cells, and dies
+when you walk out of coverage. Bonding several SIMs — ideally from different carriers — gives you:
+
+| Benefit | Description |
+|---|---|
+| 🚀 **Aggregate bandwidth** | More throughput than any single modem can provide |
+| 🛡️ **Redundancy** | Losing one link degrades the stream instead of killing it |
+| 🌐 **Diverse failure domains** | Three carriers rarely go down at the same moment |
+
+The interesting question is not *whether* to bond, but **how to divide the frame** between the
+links — because that decision determines what a dropout actually looks like to the viewer.
+
+---
+
+## 🧩 The two transmission strategies
+
+The visualiser renders **both variants side by side, live, from the same source frame**, so you
+can watch a single SIM drop and compare the damage directly.
+
+### Variant A — Quadrant split
+
+Each SIM is assigned a **rectangular region** of the frame (roughly equal in area) and encodes
+*only that region* as its own independent JPEG/PNG stream. The server composites the tiles back
+together.
+┌─────────┬─────────┐
+│ SIM 1 │ SIM 2 │
+├─────────┼─────────┤
+│ SIM 3 │ SIM 4 │
+└─────────┴─────────┘
+
+text
+
+| ✅ Pros | ❌ Cons |
+|---|---|
+| Simple, cheap, easy to reason about | **A single failed SIM blacks out an entire quadrant** |
+| Each SIM does less encoding work | Failure is spatially coherent and immediately obvious |
+
+### Variant B — Pixel round-robin
+
+Each SIM still encodes the **whole frame**, but the server only keeps a pseudo-random `1/n` of the
+pixels from each stream and discards the rest. Ownership is a **fixed, balanced, shuffled**
+assignment so every SIM gets an equal share.
+pixel owner map (n = 4): 1 3 2 1 3 2 1 3 … ← scattered, not striped
+
+text
+
+| ✅ Pros | ❌ Cons |
+|---|---|
+| Losing a SIM leaves **scattered unclear spots**, not dead regions | More encoding work per SIM |
+| The eye is far more forgiving of salt-and-pepper noise than a black rectangle | Missing pixels need **reconstruction** to look decent |
+| Massively redundant — every SIM *could* reconstruct the full frame alone | — |
+
+### Optional nearest-neighbour fill (Variant B)
+
+When a pixel's owner SIM is offline, the server can iteratively fill it from its closest
+surviving neighbours (a few passes of a simple diffusion/inpainting kernel). The result is a
+slightly soft, smeared patch instead of a hard black dot.
+
+> Toggle this in the sidebar to see the difference — it is the single biggest factor in how *bad*
+> a single-SIM outage actually looks.
+
+---
+
+## 🔌 Total failure & fiber fallback
+
+If **every** SIM goes offline, the stream does **not** end. The server holds a direct fiber
+connection to Twitch independently of the SIM array, so it keeps the RTMP session alive and swaps
+the picture for a **"We'll be right back"** card until the cellular links recover.
+┌──────────┐ ┌───────────┐ ┌──────────┐
+│ Camera │───┐ │ Assembly │ │ Twitch │
+└──────────┘ │ │ Server │ └──────────┘
+├────▶│ │─────────────▶ (SIM path)
+┌──────────┐ │ │ │
+│ SIM 1…n │───┘ │ │─────────────▶ (fiber backup)
+└──────────┘ └───────────┘
+
+text
+
+This mirrors how real bonded-streaming appliances are deployed: the cellular array is the *bonus*
+bandwidth and the *out-of-studio* path, **not** the only path.
+
+> ℹ️ The viewer never sees a "stream offline" screen — they see a hold card, and the stream's
+> uptime stat is unaffected. The visualiser switches to this fallback automatically when all SIMs
+> are toggled off.
+
+---
+
+## 🎛️ Using the visualiser
+
+| Control | What it does |
+|---|---|
+| **SIM cards slider (1–8)** | Sets *n*, the number of modems. Ownership maps and quadrant layouts recompute instantly. |
+| **SIM chips** | Click any chip to take that SIM offline/online. The LED turns red and the frame updates immediately. |
+| **Variant A / Variant B** | Chooses which composite feeds the broadcast preview. |
+| **Nearest-neighbour fill** | Enables/disables pixel reconstruction for Variant B. |
+| **Bring all SIMs online** | Restores every link. |
+| **Take all SIMs offline** | Triggers the total-failure / fiber fallback path. |
+| **Fail a random SIM** | Kills one currently-online SIM — the fastest way to feel the difference between variants. |
+
+---
+
+## 🧪 Things worth trying
+
+- 🔢 Set **n = 8** and fail two SIMs. In Variant A that is **25 % of the frame gone**; in Variant B
+  it is 25 % of pixels scattered as noise — and with fill enabled, almost invisible.
+- 🎚️ Turn **fill off** and compare. This is the honest cost of round-robin: trading coherent block
+  loss for high-frequency noise.
+- 🔌 Take **everything offline** and confirm the "We'll be right back" card appears while the
+  broadcast frame stays mounted.
+- 👀 Watch **n = 2**, where the quadrant split is literally left half / right half — the worst case
+  for Variant A.
+
+---
+
+## 📁 Project layout
+.
+├── index.html ← the entire project: markup, styles, and logic in one file
+└── README.md ← you are here
+
+text
+
+Everything is **vanilla HTML/CSS/JS** drawn onto `<canvas>` elements. The "camera" is a
+procedurally generated animated scene (gradient sky, orbiting light orbs, city silhouette, HUD
+overlay, sensor grain) so the file is **self-contained** and needs no external media.
+
+---
+
+## ⚙️ Internals
+
+<details>
+<summary><b>Key functions</b></summary>
+
+<br>
 
 | Function | Responsibility |
 |---|---|
 | `drawSource(t)` | Renders the synthetic camera frame into an offscreen canvas. |
 | `buildOwnerMap(n)` | Builds the balanced, shuffled pixel→SIM ownership map for Variant B. |
 | `getQuadCells(n)` | Computes the rectangular SIM regions for Variant A. |
-| `compositeQuadrant()` | Assembles Variant A's image; paints "NO SIGNAL" on dead regions. |
+| `compositeQuadrant()` | Assembles Variant A's image; paints `NO SIGNAL` on dead regions. |
 | `compositeRoundRobin()` | Assembles Variant B's image from surviving pixels. |
 | `inpaint()` | Nearest-neighbour diffusion fill for missing pixels in Variant B. |
 | `renderBroadcast()` | Copies the selected variant into the Twitch preview. |
 | `refreshUI()` | Updates chips, badges, wire animations, and the BRB fallback card. |
 
----
+</details>
 
-## What this is *not*
+<details>
+<summary><b>State model</b></summary>
 
-- It is **not** a real encoder or transport. Nothing is compressed, packetised, or sent over a
-  network. The "SIMs" are booleans; the "frames" are `ImageData` buffers.
-- It does **not** model latency, jitter, variable bitrate, or per-link throttling — only binary
-  up/down. A natural next step would be per-SIM bandwidth caps and a scheduler that reallocates
-  pixels or tiles based on measured throughput.
-- It is **not** a claim that one variant is strictly better. Variant A is cheaper to encode;
-  Variant B degrades more gracefully. The right choice depends on your hardware budget, your
-  encoder, and how much you care about a viewer noticing a dropout.
+<br>
 
----
+```js
+const state = {
+  n: 4,                              // active SIM count (1–8)
+  sims: new Array(8).fill(true),     // per-SIM online flag
+  fill: true,                        // nearest-neighbour inpaint on/off
+  broadcast: "quadrant",             // "quadrant" | "rr"
+};
+Changing n, sims, fill, or broadcast and calling refreshUI() is enough to drive the whole
+render pipeline on the next animation frame.
 
-## Ideas for extending it
+</details>
+⚠️ What this is not
+❌ Not a real encoder or transport. Nothing is compressed, packetised, or sent over a network.
 
-- Add per-SIM bandwidth limits and show the assembler struggling to keep up.
-- Introduce transient failures (a SIM drops for 200 ms then returns) and show recovery.
-- Replace the nearest-neighbour fill with a real edge-aware inpainting pass.
-- Add a third variant: **slice-based** (horizontal stripes), the common middle ground.
-- Animate the ownership map reshuffling when *n* changes, so you can see pixels migrate.
-- Log a fake "viewer-perceived quality" score per variant per outage.
+❌ Not a network model. It does not simulate latency, jitter, variable bitrate, or per-link
+throttling — only binary up/down.
 
----
+❌ Not a claim that one variant is strictly better. Variant A is cheaper to encode; Variant B
+degrades more gracefully. The right choice depends on your hardware budget, your encoder, and how
+much you care about a viewer noticing a dropout.
 
-## License
-
+🧪 Ideas for extending it
+□ Add per-SIM bandwidth limits and show the assembler struggling to keep up.
+□ Introduce transient failures (a SIM drops for 200 ms then returns) and show recovery.
+□ Replace the nearest-neighbour fill with a real edge-aware inpainting pass.
+□ Add a third variant: slice-based (horizontal stripes) — the common middle ground.
+□ Animate the ownership map reshuffling when *n* changes, so you can see pixels migrate.
+□ Log a fake "viewer-perceived quality" score per variant per outage.
+📄 License
 Do whatever you like with it. It exists to make an intuition visible.
+
+<div align="center">
+⬆ back to top
+
+<sub>Built to make an intuition visible — not to be deployed.</sub>
+
+</div> ``
