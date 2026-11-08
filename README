@@ -1,0 +1,47 @@
+
+Everything is vanilla HTML/CSS/JS drawn onto `<canvas>` elements. The "camera" is a procedurally
+generated animated scene (gradient sky, orbiting light orbs, city silhouette, HUD overlay, sensor
+grain) so the file is self-contained and needs no external media.
+
+Key functions, if you want to poke at the internals:
+
+| Function | Responsibility |
+|---|---|
+| `drawSource(t)` | Renders the synthetic camera frame into an offscreen canvas. |
+| `buildOwnerMap(n)` | Builds the balanced, shuffled pixel→SIM ownership map for Variant B. |
+| `getQuadCells(n)` | Computes the rectangular SIM regions for Variant A. |
+| `compositeQuadrant()` | Assembles Variant A's image; paints "NO SIGNAL" on dead regions. |
+| `compositeRoundRobin()` | Assembles Variant B's image from surviving pixels. |
+| `inpaint()` | Nearest-neighbour diffusion fill for missing pixels in Variant B. |
+| `renderBroadcast()` | Copies the selected variant into the Twitch preview. |
+| `refreshUI()` | Updates chips, badges, wire animations, and the BRB fallback card. |
+
+---
+
+## What this is *not*
+
+- It is **not** a real encoder or transport. Nothing is compressed, packetised, or sent over a
+  network. The "SIMs" are booleans; the "frames" are `ImageData` buffers.
+- It does **not** model latency, jitter, variable bitrate, or per-link throttling — only binary
+  up/down. A natural next step would be per-SIM bandwidth caps and a scheduler that reallocates
+  pixels or tiles based on measured throughput.
+- It is **not** a claim that one variant is strictly better. Variant A is cheaper to encode;
+  Variant B degrades more gracefully. The right choice depends on your hardware budget, your
+  encoder, and how much you care about a viewer noticing a dropout.
+
+---
+
+## Ideas for extending it
+
+- Add per-SIM bandwidth limits and show the assembler struggling to keep up.
+- Introduce transient failures (a SIM drops for 200 ms then returns) and show recovery.
+- Replace the nearest-neighbour fill with a real edge-aware inpainting pass.
+- Add a third variant: **slice-based** (horizontal stripes), the common middle ground.
+- Animate the ownership map reshuffling when *n* changes, so you can see pixels migrate.
+- Log a fake "viewer-perceived quality" score per variant per outage.
+
+---
+
+## License
+
+Do whatever you like with it. It exists to make an intuition visible.

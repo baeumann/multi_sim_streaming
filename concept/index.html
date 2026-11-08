@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Multi-SIM Stream Visualiser</title>
+<style>
+  :root{
+    --bg:#0a0d14;
+    --panel:#121826;
+    --panel2:#0d131e;
+    --line:#1e2735;
+    --txt:#dbe4f0;
+    --dim:#7c8aa0;
+    --cyan:#35e0ff;
+    --green:#3ddc84;
+    --red:#ff4d6a;
+    --purple:#a970ff;
+    --amber:#ffc857;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:radial-gradient(1200px 700px at 15% -10%, #17223c 0%, #0a0d14 55%) fixed, var(--bg);
+    color:var(--txt);
+    font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size:14px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{display:flex; min-height:100vh; align-items:flex-start;}
+
+  /* ---------- sidebar ---------- */
+  .sidebar{
+    width:290px; flex:none;
+    position:sticky; top:0; height:100vh; overflow-y:auto;
+    padding:20px 18px 30px;
+    border-right:1px solid var(--line);
+    background:linear-gradient(180deg,#0c1119,#080b11);
+  }
+  .brand{display:flex; align-items:center; gap:11px; margin-bottom:22px;}
+  .logo{
+    width:38px;height:38px;border-radius:11px;flex:none;
+    display:grid;place-items:center;font-size:20px;color:#06202b;
+    background:linear-gradient(140deg,var(--cyan),#2b8cff);
+    box-shadow:0 0 18px rgba(53,224,255,.35);
+  }
+  .brand h1{font-size:15px;margin:0;letter-spacing:.02em;}
+  .brand p{margin:1px 0 0;font-size:11px;color:var(--dim);letter-spacing:.09em;text-transform:uppercase;}
+
+  .group{margin-bottom:20px;}
+  .lbl{
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:10.5px; letter-spacing:.11em; text-transform:uppercase;
+    color:var(--dim); font-weight:700; margin-bottom:9px;
+  }
+  .lbl span{color:var(--cyan); font-variant-numeric:tabular-nums; font-size:12px;}
+
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:4px; border-radius:4px;
+    background:linear-gradient(90deg,var(--cyan) 0%, #2b6ea8 100%); outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:16px;height:16px;border-radius:50%;
+    background:#eaf6ff; border:3px solid #1a8fd0; cursor:pointer;
+    box-shadow:0 0 10px rgba(53,224,255,.7);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:12px;height:12px;border-radius:50%;background:#eaf6ff;border:3px solid #1a8fd0;cursor:pointer;
+  }
+
+  .radios{display:flex; flex-direction:column; gap:7px;}
+  .radios label{
+    display:flex; align-items:center; gap:8px; font-size:12.5px; color:#c3cfe0;
+    background:var(--panel2); border:1px solid var(--line); border-radius:8px;
+    padding:8px 10px; cursor:pointer; transition:.15s;
+  }
+  .radios label:hover{border-color:#2c3d55;}
+  .radios input{accent-color:var(--cyan); margin:0;}
+  .radios label:has(input:checked){border-color:#2f6f96; background:#101d2b; color:#e6f4ff;}
+
+  .switch{display:flex; align-items:center; gap:9px; font-size:12.5px; color:#c3cfe0; cursor:pointer;}
+  .switch input{accent-color:var(--green); width:15px; height:15px; margin:0;}
+  .note{font-size:11px; color:var(--dim); margin:7px 0 0; line-height:1.45;}
+
+  .btns{display:flex; flex-direction:column; gap:7px;}
+  .btns button{
+    font:inherit; font-size:12.5px; padding:8px 12px; cursor:pointer;
+    background:var(--panel2); color:#c9d6e6; border:1px solid var(--line);
+    border-radius:8px; text-align:left; transition:.15s;
+  }
+  .btns button:hover{background:#16202e; border-color:#2f4459; color:#fff;}
+  .btns button:active{transform:translateY(1px);}
+
+  .legend h3{
+    font-size:10.5px; letter-spacing:.11em; text-transform:uppercase;
+    color:var(--dim); margin:0 0 9px;
+  }
+  .legend p{font-size:11.5px; line-height:1.55; color:#94a3b8; margin:0 0 9px;}
+  .legend b{color:#cfe0f2; font-weight:600;}
+  .legend i{color:#8fd8ff; font-style:normal;}
+
+  /* ---------- main ---------- */
+  .main{
+    flex:1; min-width:0; padding:20px 22px 40px;
+    display:flex; flex-direction:column; gap:16px;
+  }
+  .panel{
+    background:linear-gradient(180deg,#131a27,#0d121c);
+    border:1px solid var(--line); border-radius:13px;
+    padding:13px 15px 15px;
+    box-shadow:0 10px 28px rgba(0,0,0,.35);
+  }
+  .panel > header{
+    display:flex; align-items:center; gap:10px; margin-bottom:11px; flex-wrap:wrap;
+  }
+  .panel h2{
+    font-size:11.5px; margin:0; letter-spacing:.1em; text-transform:uppercase;
+    color:#9fb0c8; font-weight:700;
+  }
+  .badge{
+    margin-left:auto; font-size:10.5px; font-weight:700; letter-spacing:.05em;
+    padding:3px 9px; border-radius:20px; white-space:nowrap;
+    background:#0f1724; border:1px solid #253347; color:#8fa3bb;
+    font-variant-numeric:tabular-nums;
+  }
+  .badge.ok{color:#5ef0a5; border-color:#1d4d38; background:#0c1f18;}
+  .badge.warn{color:var(--amber); border-color:#4d3d16; background:#1c1708;}
+  .badge.bad{color:#ff8095; border-color:#4d1d28; background:#1e0b11;}
+  .badge.backup{color:#c9a4ff; border-color:#3d2a5c; background:#171029;}
+
+  .hint{font-size:11.5px; color:var(--dim); margin:9px 0 0; line-height:1.45;}
+
+  /* ---------- topology ---------- */
+  .topology{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .node{
+    background:#0b1220; border:1px solid var(--line); border-radius:11px;
+    padding:9px 11px; display:flex; flex-direction:column; align-items:center; gap:7px;
+    min-width:96px; flex:none;
+  }
+  .node canvas{width:96px; height:auto; display:block; border-radius:6px; image-rendering:pixelated; background:#05070b;}
+  .node .ico{font-size:20px; line-height:1;}
+  .node .node-label{font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#8fa3bb; font-weight:700; white-space:nowrap;}
+  .node.server .ico{color:var(--cyan); text-shadow:0 0 12px rgba(53,224,255,.6);}
+  .node.twitch{border-color:#3d2a5c;}
+  .node.twitch .ico{color:var(--purple); text-shadow:0 0 12px rgba(169,112,255,.7);}
+  .node.twitch .node-label{color:#c3a8ff;}
+
+  .wire{
+    flex:1 1 30px; min-width:22px; height:3px; border-radius:3px;
+    background-image:repeating-linear-gradient(90deg,#2f7fbd 0 5px, transparent 5px 10px);
+    background-size:10px 3px;
+    animation:flow .75s linear infinite;
+    opacity:.95;
+  }
+  .wire.dead{
+    background-image:repeating-linear-gradient(90deg,#3d2230 0 5px, transparent 5px 10px);
+    animation-play-state:paused; opacity:.75;
+  }
+  @keyframes flow{from{background-position:0 0} to{background-position:10px 0}}
+
+  .rack{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; flex:2 1 260px; min-width:230px;}
+  .sim{
+    display:flex; align-items:center; gap:6px;
+    background:#0b1220; border:1px solid #233246; color:#cbd7e6;
+    border-radius:8px; padding:7px 8px; font:inherit; font-size:11px;
+    cursor:pointer; user-select:none; transition:.15s; text-align:left; min-width:0;
+  }
+  .sim:hover{background:#101a29; border-color:#33475e;}
+  .sim .led{
+    width:8px;height:8px;border-radius:50%;flex:none;background:var(--green);
+    box-shadow:0 0 9px rgba(61,220,132,.9);
+  }
+  .sim .sim-name{font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .sim .sim-state{margin-left:auto; font-size:8.5px; letter-spacing:.08em; text-transform:uppercase; color:#5c7f6c; white-space:nowrap;}
+  .sim.off{background:#1a0c12; border-color:#4a1b28; color:#9c8289;}
+  .sim.off .led{background:var(--red); box-shadow:0 0 9px rgba(255,77,106,.95);}
+  .sim.off .sim-state{color:#a3566a;}
+
+  /* ---------- previews ---------- */
+  .previews{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  canvas.frame{
+    width:100%; display:block; border-radius:9px; background:#05070b;
+    image-rendering:pixelated; border:1px solid #0b1220;
+  }
+
+  /* ---------- twitch ---------- */
+  .stage{position:relative; max-width:540px; margin:0 auto;}
+  .brb{
+    position:absolute; inset:0; border-radius:9px; display:none;
+    background:
+      repeating-linear-gradient(135deg, rgba(169,112,255,.05) 0 14px, transparent 14px 28px),
+      linear-gradient(150deg,#1c1136,#0a0d14 65%);
+    place-items:center; text-align:center; overflow:hidden;
+  }
+  .brb.on{display:grid;}
+  .brb h3{
+    margin:12px 0 5px; font-size:19px; letter-spacing:.01em;
+    background:linear-gradient(90deg,#c9a4ff,#6fd8ff);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .brb p{margin:0; font-size:11.5px; color:#8b9ab0; letter-spacing:.05em;}
+  .spinner{
+    width:34px;height:34px;margin:0 auto;border-radius:50%;
+    border:3px solid rgba(169,112,255,.18);
+    border-top-color:var(--purple);
+    animation:spin 1s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .mode-switch{
+    display:flex; align-items:center; justify-content:center; gap:16px;
+    margin-top:11px; font-size:11.5px; color:var(--dim); flex-wrap:wrap;
+  }
+  .mode-switch label{display:flex; align-items:center; gap:6px; cursor:pointer; color:#c3cfe0;}
+  .mode-switch input{accent-color:var(--purple); margin:0;}
+
+  @media (max-width:1000px){
+    .app{flex-direction:column;}
+    .sidebar{position:static; width:100%; height:auto; border-right:none; border-bottom:1px solid var(--line);}
+    .previews{grid-template-columns:1fr;}
+    .rack{grid-template-columns:repeat(2,minmax(0,1fr));}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">◈</div>
+      <div>
+        <h1>Multi-SIM Stream</h1>
+        <p>uplink visualiser</p>
+      </div>
+    </div>
+
+    <div class="group">
+      <label class="lbl" for="nRange">SIM cards <span id="nVal">4</span></label>
+      <input type="range" id="nRange" min="1" max="8" step="1" value="4" />
+    </div>
+
+    <div class="group">
+      <label class="lbl">Broadcast source → Twitch</label>
+      <div class="radios">
+        <label><input type="radio" name="bc" value="quadrant" checked /> <span>Variant A — Quadrants</span></label>
+        <label><input type="radio" name="bc" value="rr" /> <span>Variant B — Pixel round-robin</span></label>
+      </div>
+    </div>
+
+    <div class="group">
+      <label class="switch">
+        <input type="checkbox" id="fillChk" checked />
+        <span>Nearest-neighbour fill (B)</span>
+      </label>
+      <p class="note">Reconstructs dead pixels from their closest live neighbours to hide the dropouts.</p>
+    </div>
+
+    <div class="group">
+      <div class="btns">
+        <button id="allOn">✓ Bring all SIMs online</button>
+        <button id="allOff">✕ Take all SIMs offline</button>
+        <button id="killOne">⚡ Fail a random SIM</button>
+      </div>
+    </div>
+
+    <div class="group legend">
+      <h3>How it works</h3>
+      <p><b>A — Quadrants:</b> every SIM encodes one region of the frame. Losing a SIM blacks out a whole region of the broadcast.</p>
+      <p><b>B — Round-robin pixels:</b> every SIM still encodes the <i>whole</i> frame, but only its own 1/n of the pixels survive assembly. Losing a SIM only leaves scattered dropouts, not dead regions.</p>
+      <p><b>Total failure:</b> the server falls back to a direct fiber link to Twitch and keeps the stream alive with a “be right back” card instead of going dark.</p>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- topology -->
+    <section class="panel">
+      <header><h2>Signal path</h2></header>
+      <div class="topology">
+        <div class="node">
+          <canvas id="camCanvas" width="240" height="135"></canvas>
+          <div class="node-label">Camera</div>
+        </div>
+        <div class="wire" id="wire1"></div>
+        <div class="rack" id="rack"></div>
+        <div class="wire" id="wire2"></div>
+        <div class="node server">
+          <div class="ico">▤</div>
+          <div class="node-label">Assembly</div>
+        </div>
+        <div class="wire" id="wire3"></div>
+        <div class="node twitch">
+          <div class="ico">◉</div>
+          <div class="node-label">Twitch</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- both variants -->
+    <section class="previews">
+      <div class="panel">
+        <header>
+          <h2>Variant A — Quadrant split</h2>
+          <span class="badge" id="badgeA">—</span>
+        </header>
+        <canvas id="qCanvas" class="frame" width="240" height="135"></canvas>
+        <p class="hint">Each SIM streams one region of the frame. One SIM down = one region goes dark.</p>
+      </div>
+
+      <div class="panel">
+        <header>
+          <h2>Variant B — Pixel round-robin</h2>
+          <span class="badge" id="badgeB">—</span>
+        </header>
+        <canvas id="rrCanvas" class="frame" width="240" height="135"></canvas>
+        <p class="hint">Each SIM sends the full frame but only its 1/n pixels survive. One SIM down = a few unclear spots.</p>
+      </div>
+    </section>
+
+    <!-- twitch output -->
+    <section class="panel">
+      <header>
+        <h2>Live on Twitch</h2>
+        <span class="badge" id="uplinkBadge">—</span>
+      </header>
+      <div class="stage">
+        <canvas id="twCanvas" class="frame" width="240" height="135"></canvas>
+        <div class="brb" id="brb">
+          <div>
+            <div class="spinner"></div>
+            <h3>We'll be right back</h3>
+            <p>Signal lost — fiber backup holding the stream</p>
+          </div>
+        </div>
+      </div>
+      <div class="mode-switch">
+        Broadcast source:
+        <label><input type="radio" name="bc2" value="quadrant" checked /> Variant A</label>
+        <label><input type="radio" name="bc2" value="rr" /> Variant B</label>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  /* ==================== constants & state ==================== */
+  const W = 240, H = 135, MAXN = 8;
+
+  const state = {
+    n: 4,
+    sims: new Array(MAXN).fill(true),
+    fill: true,
+    broadcast: "quadrant",
+  };
+
+  /* ==================== canvases ==================== */
+  const srcCanvas = document.createElement("canvas");
+  srcCanvas.width = W; srcCanvas.height = H;
+  const sctx = srcCanvas.getContext("2d", { willReadFrequently: true });
+
+  const camCanvas = document.getElementById("camCanvas");
+  camCanvas.width = W; camCanvas.height = H;
+  const camCtx = camCanvas.getContext("2d");
+
+  const qCanvas  = document.getElementById("qCanvas");
+  const qctx     = qCanvas.getContext("2d");
+  const rrCanvas = document.getElementById("rrCanvas");
+  const rrctx    = rrCanvas.getContext("2d");
+  const twCanvas = document.getElementById("twCanvas");
+  const twctx    = twCanvas.getContext("2d");
+
+  /* ==================== buffers ==================== */
+  const qImg  = qctx.createImageData(W, H);
+  const rrImg = rrctx.createImageData(W, H);
+  const mask    = new Uint8Array(W * H);
+  const tmpData = new Uint8ClampedArray(W * H * 4);
+  const tmpMask = new Uint8Array(W * H);
+
+  let ownerMap = new Uint8Array(W * H);
+  let srcData  = null;
+
+  /* ==================== pixel ownership (round-robin) ==================== */
+  // Balanced scatter: fill 0..n-1,0..n-1,... then Fisher-Yates shuffle.
+  function buildOwnerMap(n) {
+    const total = W * H;
+    const arr = new Uint8Array(total);
+    for (let i = 0; i < total; i++) arr[i] = i % n;
+
+    let seed = 987654321 >>> 0;
+    const rnd = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    for (let i = total - 1; i > 0; i--) {
+      const j = (rnd() * (i + 1)) | 0;
+      const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    ownerMap = arr;
+  }
+
+  /* ==================== quadrant cell layout ==================== */
+  let quadCells = [];
+  let quadCellsN = -1;
+  function getQuadCells(n) {
+    if (n === quadCellsN) return quadCells;
+    quadCellsN = n;
+    const cols = Math.ceil(Math.sqrt(n));
+    const rows = Math.ceil(n / cols);
+    const cells = [];
+    for (let cy = 0; cy < rows; cy++) {
+      for (let cx = 0; cx < cols; cx++) {
+        const idx = cy * cols + cx;
+        cells.push({
+          owner: idx % n,
+          x0: Math.floor(cx * W / cols), x1: Math.floor((cx + 1) * W / cols),
+          y0: Math.floor(cy * H / rows), y1: Math.floor((cy + 1) * H / rows),
+        });
+      }
+    }
+    quadCells = cells;
+    return cells;
+  }
+
+  /* ==================== synthetic "camera" scene ==================== */
+  function pad(n) { return n < 10 ? "0" + n : "" + n; }
+  function fmtTime(t) {
+    const total = Math.floor(t);
+    return pad(Math.floor(total / 3600) % 24) + ":" +
+           pad(Math.floor(total / 60) % 60) + ":" +
+           pad(total % 60) + ":" +
+           pad(Math.floor((t % 1) * 30));
+  }
+
+  function drawSource(t) {
+    const c = sctx;
+    const hue = (t * 6) % 360;
+
+    // sky
+    const g = c.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0,    `hsl(${hue},60%,16%)`);
+    g.addColorStop(0.55, `hsl(${(hue + 45) % 360},70%,38%)`);
+    g.addColorStop(1,    `hsl(${(hue + 90) % 360},80%,26%)`);
+    c.fillStyle = g;
+    c.fillRect(0, 0, W, H);
+
+    // sun + orbs
+    c.save();
+    c.globalCompositeOperation = "lighter";
+    const sx = W * 0.5 + Math.cos(t * 0.6) * W * 0.30;
+    const sy = H * 0.36 + Math.sin(t * 0.9) * H * 0.14;
+    const rg = c.createRadialGradient(sx, sy, 1, sx, sy, H * 0.55);
+    rg.addColorStop(0,    "rgba(255,245,200,0.95)");
+    rg.addColorStop(0.08, "rgba(255,200,110,0.75)");
+    rg.addColorStop(0.40, "rgba(255,110,40,0.25)");
+    rg.addColorStop(1,    "rgba(255,60,0,0)");
+    c.fillStyle = rg;
+    c.fillRect(0, 0, W, H);
+
+    for (let i = 0; i < 5; i++) {
+      const a  = t * (0.5 + i * 0.17) + i * 2.1;
+      const ox = W * 0.5 + Math.cos(a) * W * (0.14 + i * 0.07);
+      const oy = H * 0.40 + Math.sin(a * 1.3) * H * (0.10 + i * 0.05);
+      const r  = 6 + i * 2;
+      const og = c.createRadialGradient(ox, oy, 0, ox, oy, r * 3);
+      const hh = (hue + i * 62) % 360;
+      og.addColorStop(0, `hsla(${hh},100%,70%,0.90)`);
+      og.addColorStop(1, `hsla(${hh},100%,50%,0)`);
+      c.fillStyle = og;
+      c.beginPath(); c.arc(ox, oy, r * 3, 0, 7); c.fill();
+    }
+    c.restore();
+
+    // city silhouette
+    const baseY = H * 0.78;
+    c.fillStyle = "#0a0a18";
+    for (let i = 0; i < 16; i++) {
+      const bw = W / 16;
+      const bh = 10 + ((i * 53) % 26);
+      c.fillRect(i * bw, baseY - bh, bw - 1, bh + 2);
+    }
+    // windows (flicker)
+    c.fillStyle = "rgba(255,215,140,0.9)";
+    for (let i = 0; i < 16; i++) {
+      for (let j = 0; j < 5; j++) {
+        if (((i * 13 + j * 7 + Math.floor(t * 1.5)) % 4) === 0) continue;
+        c.fillRect(i * (W / 16) + 2, baseY - 6 - j * 5, 2, 2);
+      }
+    }
+
+    // ground
+    const gg = c.createLinearGradient(0, baseY, 0, H);
+    gg.addColorStop(0, "#120f22");
+    gg.addColorStop(1, "#05040c");
+    c.fillStyle = gg;
+    c.fillRect(0, baseY + 2, W, H - baseY);
+
+    // moving road markings
+    c.fillStyle = "rgba(255,255,255,0.55)";
+    for (let i = -1; i < 10; i++) {
+      const x = ((i * 40 + t * 90) % (W + 60)) - 30;
+      c.fillRect(x, H - 14, 16, 2);
+    }
+
+    // HUD
+    c.fillStyle = "rgba(0,0,0,0.45)";
+    c.fillRect(0, 0, W, 11);
+    c.fillRect(0, H - 11, W, 11);
+
+    c.font = "bold 7px ui-monospace, Menlo, monospace";
+    c.textBaseline = "middle";
+    c.textAlign = "left";
+
+    c.fillStyle = "#ff5a6e";
+    c.beginPath(); c.arc(6, 5.5, 2.2, 0, 7); c.fill();
+    c.fillStyle = "#ffffff";
+    c.fillText("LIVE", 11, 6.5);
+    c.fillStyle = "#b9c6d8";
+    c.fillText(fmtTime(t), W - 58, 6.5);
+
+    c.fillStyle = "#9fb0c8";
+    c.fillText("CAM 01 · " + W + "×" + H, 4, H - 5.5);
+    c.textAlign = "right";
+    c.fillText("SIM-ARRAY UPLINK", W - 4, H - 5.5);
+    c.textAlign = "left";
+
+    // sensor grain
+    for (let i = 0; i < 240; i++) {
+      const x = (Math.random() * W) | 0;
+      const y = (Math.random() * H) | 0;
+      c.fillStyle = "rgba(255,255,255," + (Math.random() * 0.14).toFixed(3) + ")";
+      c.fillRect(x, y, 1, 1);
+    }
+  }
+
+  /* ==================== variant A : quadrants ==================== */
+  function compositeQuadrant() {
+    const n = state.n, on = state.sims;
+    const d = qImg.data, s = srcData.data;
+
+    // background = "no data"
+    for (let i = 0; i < d.length; i += 4) {
+      d[i] = 9; d[i + 1] = 12; d[i + 2] = 20; d[i + 3] = 255;
+    }
+
+    const cells = getQuadCells(n);
+    for (let ci = 0; ci < cells.length; ci++) {
+      const cell = cells[ci];
+      if (!on[cell.owner]) continue;
+      for (let y = cell.y0; y < cell.y1; y++) {
+        const row = y * W;
+        for (let x = cell.x0; x < cell.x1; x++) {
+          const i = (row + x) * 4;
+          d[i] = s[i]; d[i + 1] = s[i + 1]; d[i + 2] = s[i + 2]; d[i + 3] = 255;
+        }
+      }
+    }
+    qctx.putImageData(qImg, 0, 0);
+
+    // region outlines / labels
+    qctx.lineWidth = 1;
+    for (let ci = 0; ci < cells.length; ci++) {
+      const cell = cells[ci];
+      const live = on[cell.owner];
+      qctx.strokeStyle = live ? "rgba(80,255,180,0.22)" : "rgba(255,70,90,0.95)";
+      qctx.setLineDash(live ? [] : [3, 3]);
+      qctx.strokeRect(cell.x0 + 0.5, cell.y0 + 0.5, cell.x1 - cell.x0 - 1, cell.y1 - cell.y0 - 1);
+      if (!live && (cell.x1 - cell.x0) > 46 && (cell.y1 - cell.y0) > 22) {
+        qctx.setLineDash([]);
+        qctx.fillStyle = "rgba(255,90,110,0.9)";
+        qctx.font = "bold 7px ui-monospace, Menlo, monospace";
+        qctx.textAlign = "center";
+        qctx.textBaseline = "middle";
+        qctx.fillText("NO SIGNAL", (cell.x0 + cell.x1) / 2, (cell.y0 + cell.y1) / 2);
+        qctx.textAlign = "left";
+      }
+    }
+    qctx.setLineDash([]);
+  }
+
+  /* ==================== variant B : round-robin pixels ==================== */
+  function inpaint() {
+    const d = rrImg.data;
+    for (let pass = 0; pass < 6; pass++) {
+      tmpData.set(d);
+      tmpMask.set(mask);
+      let changed = 0;
+
+      for (let y = 0; y < H; y++) {
+        const y0 = y > 0 ? y - 1 : y;
+        const y1 = y < H - 1 ? y + 1 : y;
+        for (let x = 0; x < W; x++) {
+          const p = y * W + x;
+          if (mask[p]) continue;
+
+          const x0 = x > 0 ? x - 1 : x;
+          const x1 = x < W - 1 ? x + 1 : x;
+          let r = 0, g = 0, b = 0, cnt = 0;
+
+          for (let yy = y0; yy <= y1; yy++) {
+            const row = yy * W;
+            for (let xx = x0; xx <= x1; xx++) {
+              const q = row + xx;
+              if (q === p || !mask[q]) continue;
+              const qi = q * 4;
+              r += d[qi]; g += d[qi + 1]; b += d[qi + 2];
+              cnt++;
+            }
+          }
+          if (cnt) {
+            const i = p * 4;
+            tmpData[i]     = r / cnt;
+            tmpData[i + 1] = g / cnt;
+            tmpData[i + 2] = b / cnt;
+            tmpData[i + 3] = 255;
+            tmpMask[p] = 1;
+            changed++;
+          }
+        }
+      }
+      if (!changed) break;
+      d.set(tmpData);
+      mask.set(tmpMask);
+    }
+  }
+
+  function compositeRoundRobin() {
+    const on = state.sims;
+    const d = rrImg.data, s = srcData.data;
+    let missing = 0;
+
+    for (let p = 0, i = 0; p < W * H; p++, i += 4) {
+      if (on[ownerMap[p]]) {
+        d[i] = s[i]; d[i + 1] = s[i + 1]; d[i + 2] = s[i + 2]; d[i + 3] = 255;
+        mask[p] = 1;
+      } else {
+        d[i] = 9; d[i + 1] = 12; d[i + 2] = 20; d[i + 3] = 255;
+        mask[p] = 0;
+        missing++;
+      }
+    }
+
+    if (state.fill && missing) inpaint();
+    rrctx.putImageData(rrImg, 0, 0);
+  }
+
+  /* ==================== broadcast (to Twitch) ==================== */
+  function renderBroadcast() {
+    const src = state.broadcast === "quadrant" ? qCanvas : rrCanvas;
+    twctx.drawImage(src, 0, 0);
+  }
+
+  /* ==================== DOM refs ==================== */
+  const rack       = document.getElementById("rack");
+  const badgeA     = document.getElementById("badgeA");
+  const badgeB     = document.getElementById("badgeB");
+  const uplinkBadge= document.getElementById("uplinkBadge");
+  const brb        = document.getElementById("brb");
+  const wire1      = document.getElementById("wire1");
+  const wire2      = document.getElementById("wire2");
+  const wire3      = document.getElementById("wire3");
+  const nRange     = document.getElementById("nRange");
+  const nVal       = document.getElementById("nVal");
+
+  /* ==================== SIM rack ==================== */
+  function buildRack() {
+    rack.innerHTML = "";
+    for (let i = 0; i < MAXN; i++) {
+      const b = document.createElement("button");
+      b.className = "sim";
+      b.type = "button";
+      b.dataset.i = i;
+      b.innerHTML =
+        '<span class="led"></span>' +
+        '<span class="sim-name">SIM ' + (i + 1) + '</span>' +
+        '<span class="sim-state">online</span>';
+      b.addEventListener("click", () => {
+        state.sims[i] = !state.sims[i];
+        refreshUI();
+      });
+      rack.appendChild(b);
+    }
+  }
+
+  /* ==================== UI refresh (state only) ==================== */
+  function refreshUI() {
+    const n = state.n;
+    const on = state.sims;
+
+    // chips
+    for (let i = 0; i < rack.children.length; i++) {
+      const el = rack.children[i];
+      el.style.display = i < n ? "" : "none";
+      const live = on[i];
+      el.classList.toggle("off", !live);
+      el.querySelector(".sim-state").textContent = live ? "online" : "offline";
+    }
+
+    const onlineCount = on.slice(0, n).filter(Boolean).length;
+    const anyOn = onlineCount > 0;
+
+    // variant A stats
+    let lostArea = 0;
+    for (const c of getQuadCells(n)) {
+      if (!on[c.owner]) lostArea += (c.x1 - c.x0) * (c.y1 - c.y0);
+    }
+    const pctA = Math.round(lostArea / (W * H) * 100);
+    badgeA.textContent = pctA === 0 ? "frame intact" : pctA + "% of frame missing";
+    badgeA.className = "badge " + (pctA === 0 ? "ok" : pctA < 50 ? "warn" : "bad");
+
+    // variant B stats
+    const pctB = Math.round((n - onlineCount) / n * 100);
+    badgeB.textContent = pctB === 0 ? "frame intact" : pctB + "% of pixels lost";
+    badgeB.className = "badge " + (pctB === 0 ? "ok" : pctB < 50 ? "warn" : "bad");
+
+    // uplink
+    if (anyOn) {
+      uplinkBadge.textContent = "SIM ARRAY · " + onlineCount + "/" + n + " ONLINE";
+      uplinkBadge.className = "badge " + (onlineCount === n ? "ok" : "warn");
+    } else {
+      uplinkBadge.textContent = "FIBER BACKUP ACTIVE";
+      uplinkBadge.className = "badge backup";
+    }
+
+    // wires
+    wire1.classList.toggle("dead", !anyOn);
+    wire2.classList.toggle("dead", !anyOn);
+    wire3.classList.toggle("dead", false);
+
+    // be-right-back card
+    brb.classList.toggle("on", !anyOn);
+  }
+
+  /* ==================== controls ==================== */
+  nRange.addEventListener("input", () => {
+    state.n = parseInt(nRange.value, 10);
+    nVal.textContent = state.n;
+    quadCellsN = -1;
+    buildOwnerMap(state.n);
+    refreshUI();
+  });
+
+  document.querySelectorAll('input[name="bc"]').forEach((r) => {
+    r.addEventListener("change", () => {
+      if (!r.checked) return;
+      state.broadcast = r.value;
+      document.querySelectorAll('input[name="bc2"]').forEach((r2) => {
+        r2.checked = r2.value === r.value;
+      });
+    });
+  });
+
+  document.querySelectorAll('input[name="bc2"]').forEach((r) => {
+    r.addEventListener("change", () => {
+      if (!r.checked) return;
+      state.broadcast = r.value;
+      document.querySelectorAll('input[name="bc"]').forEach((r2) => {
+        r2.checked = r2.value === r.value;
+      });
+    });
+  });
+
+  document.getElementById("fillChk").addEventListener("change", (e) => {
+    state.fill = e.target.checked;
+  });
+
+  document.getElementById("allOn").addEventListener("click", () => {
+    state.sims.fill(true);
+    refreshUI();
+  });
+
+  document.getElementById("allOff").addEventListener("click", () => {
+    state.sims.fill(false);
+    refreshUI();
+  });
+
+  document.getElementById("killOne").addEventListener("click", () => {
+    const alive = [];
+    for (let i = 0; i < state.n; i++) if (state.sims[i]) alive.push(i);
+    if (!alive.length) return;
+    state.sims[alive[(Math.random() * alive.length) | 0]] = false;
+    refreshUI();
+  });
+
+  /* ==================== main loop ==================== */
+  const FPS = 30;
+  const FRAME_MS = 1000 / FPS;
+  let last = 0;
+
+  function loop(ts) {
+    requestAnimationFrame(loop);
+    if (ts - last < FRAME_MS) return;
+    last = ts;
+
+    const t = ts / 1000;
+
+    drawSource(t);
+    camCtx.drawImage(srcCanvas, 0, 0);
+
+    srcData = sctx.getImageData(0, 0, W, H);
+
+    compositeQuadrant();
+    compositeRoundRobin();
+    renderBroadcast();
+  }
+
+  /* ==================== boot ==================== */
+  buildRack();
+  buildOwnerMap(state.n);
+  nVal.textContent = state.n;
+  refreshUI();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
